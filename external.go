@@ -22,16 +22,20 @@ func RegisterIndexes(indexes Indexes) {
 	module.RegisterIndexes(indexes)
 }
 
-func CreateIndex(name string, index Index) error {
-	return module.CreateIndex(name, index)
+func Clear(index string) error {
+	return module.Clear(index)
 }
 
-func DropIndex(name string) error {
-	return module.DropIndex(name)
+func GetCapabilities(index string) Capabilities {
+	return module.Capabilities(index)
 }
 
-func Upsert(index string, docs []Document) error {
-	return module.Upsert(index, docs)
+func ListCapabilities() map[string]Capabilities {
+	return module.ListCapabilities()
+}
+
+func Upsert(index string, rows ...Map) error {
+	return module.Upsert(index, rows...)
 }
 
 func Delete(index string, ids []string) error {
@@ -46,6 +50,6 @@ func Count(index, keyword string, args ...Any) (int64, error) {
 	return module.Count(index, keyword, args...)
 }
 
-func Suggest(index, text string, limit int) ([]string, error) {
-	return module.Suggest(index, text, limit)
+func Signature(index, keyword string, args ...Any) string {
+	return QuerySignature(index, BuildQuery(keyword, args...))
 }

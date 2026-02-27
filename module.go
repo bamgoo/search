@@ -244,7 +244,7 @@ func (m *Module) Open() {
 		if conn == nil {
 			continue
 		}
-		if err := conn.CreateIndex(name, index); err != nil {
+		if err := conn.SyncIndex(name, index); err != nil {
 			panic("create search index failed: " + err.Error())
 		}
 	}
@@ -298,35 +298,49 @@ func (m *Module) pickConnLocked(key string) Connection {
 	return nil
 }
 
-func (m *Module) CreateIndex(name string, index Index) error {
-	if strings.TrimSpace(name) != "" {
-		m.RegisterIndex(name, index)
+func (m *Module) Clear(index string) error {
+	index = strings.TrimSpace(index)
+	if index == "" {
+		return fmt.Errorf("search index is empty")
 	}
-	conn := m.pickConn(name)
-	if conn == nil {
-		return fmt.Errorf("search is not ready")
-	}
-	return conn.CreateIndex(name, index)
-}
-
-func (m *Module) DropIndex(name string) error {
-	conn := m.pickConn(name)
-	if conn == nil {
-		return fmt.Errorf("search is not ready")
-	}
-	return conn.DropIndex(name)
-}
-
-func (m *Module) Upsert(index string, docs []Document) error {
 	conn := m.pickConn(index)
 	if conn == nil {
 		return fmt.Errorf("search is not ready")
 	}
-	docs, err := m.prepareDocs(index, docs)
+	return conn.Clear(index)
+}
+
+func (m *Module) Capabilities(index string) Capabilities {
+	conn := m.pickConn(index)
+	if conn == nil {
+		return Capabilities{}
+	}
+	return conn.Capabilities()
+}
+
+func (m *Module) ListCapabilities() map[string]Capabilities {
+	out := map[string]Capabilities{}
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	for name, inst := range m.instances {
+		if inst == nil || inst.conn == nil {
+			continue
+		}
+		out[name] = inst.conn.Capabilities()
+	}
+	return out
+}
+
+func (m *Module) Upsert(index string, rows ...Map) error {
+	conn := m.pickConn(index)
+	if conn == nil {
+		return fmt.Errorf("search is not ready")
+	}
+	rows, err := m.prepareRows(index, rows)
 	if err != nil {
 		return err
 	}
-	return conn.Upsert(index, docs)
+	return conn.Upsert(index, rows)
 }
 
 func (m *Module) Delete(index string, ids []string) error {
@@ -359,45 +373,54 @@ func (m *Module) Count(index, keyword string, args ...Any) (int64, error) {
 	return conn.Count(index, query)
 }
 
-func (m *Module) Suggest(index, text string, limit int) ([]string, error) {
-	conn := m.pickConn(index)
-	if conn == nil {
-		return nil, fmt.Errorf("search is not ready")
-	}
-	return conn.Suggest(index, text, limit)
-}
-
-func (m *Module) prepareDocs(index string, docs []Document) ([]Document, error) {
+func (m *Module) prepareRows(index string, rows []Map) ([]Map, error) {
 	m.mutex.RLock()
 	idx, ok := m.indexes[index]
 	m.mutex.RUnlock()
+	if !ok {
+		idx = Index{}
+	}
+	pk := idx.Primary
+	if pk == "" {
+		pk = "id"
+	}
+	strictWrite := idx.StrictWrite
 	if !ok || len(idx.Attributes) == 0 {
-		return docs, nil
+		out := make([]Map, 0, len(rows))
+		for _, row := range rows {
+			payload := clonePayload(row)
+			if payload == nil {
+				payload = Map{}
+			}
+			idValue, ok := payload[pk]
+			if !ok || fmt.Sprintf("%v", idValue) == "" {
+				idValue, ok = payload["id"]
+				if !ok || fmt.Sprintf("%v", idValue) == "" {
+					return nil, fmt.Errorf("search index %s missing primary key %s", index, pk)
+				}
+			}
+			payload[pk] = idValue
+			payload["id"] = idValue
+			out = append(out, payload)
+		}
+		return out, nil
 	}
 
-	strictWrite := true
-	if !idx.StrictWrite {
-		strictWrite = false
-	}
-
-	out := make([]Document, 0, len(docs))
-	for _, doc := range docs {
-		payload := clonePayload(doc.Payload)
+	out := make([]Map, 0, len(rows))
+	for _, row := range rows {
+		payload := clonePayload(row)
 		if payload == nil {
 			payload = Map{}
 		}
-		pk := idx.Primary
-		if pk == "" {
-			pk = "id"
-		}
-		if doc.ID != "" {
-			if _, ok := payload[pk]; !ok {
-				payload[pk] = doc.ID
-			}
-			if _, ok := payload["id"]; !ok {
-				payload["id"] = doc.ID
+		idValue, ok := payload[pk]
+		if !ok || fmt.Sprintf("%v", idValue) == "" {
+			idValue, ok = payload["id"]
+			if !ok || fmt.Sprintf("%v", idValue) == "" {
+				return nil, fmt.Errorf("search index %s missing primary key %s", index, pk)
 			}
 		}
+		payload[pk] = idValue
+		payload["id"] = idValue
 
 		wrapped := Map{}
 		res := bamgoo.Mapping(idx.Attributes, payload, wrapped, false, !strictWrite)
@@ -405,20 +428,12 @@ func (m *Module) prepareDocs(index string, docs []Document) ([]Document, error) 
 			return nil, fmt.Errorf("search index %s mapping failed: %s", index, res.Error())
 		}
 
-		newDoc := doc
 		if len(wrapped) > 0 {
-			newDoc.Payload = wrapped
-		} else {
-			newDoc.Payload = payload
+			payload = wrapped
 		}
-		if newDoc.ID == "" {
-			if vv, ok := newDoc.Payload[pk]; ok {
-				newDoc.ID = fmt.Sprintf("%v", vv)
-			} else if vv, ok := newDoc.Payload["id"]; ok {
-				newDoc.ID = fmt.Sprintf("%v", vv)
-			}
-		}
-		out = append(out, newDoc)
+		payload[pk] = idValue
+		payload["id"] = idValue
+		out = append(out, payload)
 	}
 	return out, nil
 }

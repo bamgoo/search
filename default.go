@@ -34,8 +34,23 @@ func (d *defaultDriver) Connect(inst *Instance) (Connection, error) {
 
 func (c *defaultConnection) Open() error  { return nil }
 func (c *defaultConnection) Close() error { return nil }
+func (c *defaultConnection) Capabilities() Capabilities {
+	return Capabilities{
+		SyncIndex: true,
+		Clear:     true,
+		Upsert:    true,
+		Delete:    true,
+		Search:    true,
+		Count:     true,
+		Suggest:   false,
+		Sort:      true,
+		Facets:    true,
+		Highlight: true,
+		FilterOps: []string{OpEq, OpNe, OpIn, OpNin, OpGt, OpGte, OpLt, OpLte, OpRange},
+	}
+}
 
-func (c *defaultConnection) CreateIndex(name string, index Index) error {
+func (c *defaultConnection) SyncIndex(name string, index Index) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if _, ok := c.indexes[name]; !ok {
@@ -44,10 +59,12 @@ func (c *defaultConnection) CreateIndex(name string, index Index) error {
 	return nil
 }
 
-func (c *defaultConnection) DropIndex(name string) error {
+func (c *defaultConnection) Clear(name string) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	delete(c.indexes, name)
+	if idx, ok := c.indexes[name]; ok && idx != nil {
+		idx.docs = map[string]Map{}
+	}
 	return nil
 }
 
@@ -60,15 +77,19 @@ func (c *defaultConnection) ensure(index string) *memoryIndex {
 	return idx
 }
 
-func (c *defaultConnection) Upsert(index string, docs []Document) error {
+func (c *defaultConnection) Upsert(index string, rows []Map) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	idx := c.ensure(index)
-	for _, doc := range docs {
-		if doc.ID == "" {
+	for _, row := range rows {
+		if row == nil {
 			continue
 		}
-		idx.docs[doc.ID] = cloneMap(doc.Payload)
+		id := fmt.Sprintf("%v", row["id"])
+		if id == "" || id == "<nil>" {
+			continue
+		}
+		idx.docs[id] = cloneMap(row)
 	}
 	return nil
 }
@@ -97,7 +118,7 @@ func (c *defaultConnection) Search(index string, query Query) (Result, error) {
 	keyword := strings.ToLower(strings.TrimSpace(query.Keyword))
 
 	for id, payload := range idx.docs {
-		if !defaultKeywordMatch(keyword, payload) {
+		if !defaultKeywordMatch(keyword, payload, query.Prefix) {
 			continue
 		}
 		ok := true
@@ -199,49 +220,16 @@ func (c *defaultConnection) Count(index string, query Query) (int64, error) {
 	return res.Total, nil
 }
 
-func (c *defaultConnection) Suggest(index string, text string, limit int) ([]string, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-	c.mutex.RLock()
-	idx := c.indexes[index]
-	c.mutex.RUnlock()
-	if idx == nil {
-		return []string{}, nil
-	}
-	text = strings.ToLower(strings.TrimSpace(text))
-	set := map[string]struct{}{}
-	for _, payload := range idx.docs {
-		for _, raw := range payload {
-			s := strings.TrimSpace(fmt.Sprintf("%v", raw))
-			if s == "" {
-				continue
-			}
-			if text == "" || strings.Contains(strings.ToLower(s), text) {
-				set[s] = struct{}{}
-				if len(set) >= limit*2 {
-					break
-				}
-			}
-		}
-	}
-	vals := make([]string, 0, len(set))
-	for s := range set {
-		vals = append(vals, s)
-	}
-	sort.Strings(vals)
-	if len(vals) > limit {
-		vals = vals[:limit]
-	}
-	return vals, nil
-}
-
-func defaultKeywordMatch(keyword string, payload Map) bool {
+func defaultKeywordMatch(keyword string, payload Map, prefix bool) bool {
 	if keyword == "" {
 		return true
 	}
 	bts, _ := json.Marshal(payload)
-	return strings.Contains(strings.ToLower(string(bts)), keyword)
+	data := strings.ToLower(string(bts))
+	if prefix {
+		return strings.HasPrefix(data, keyword)
+	}
+	return strings.Contains(data, keyword)
 }
 
 func compareForSort(a, b Any) int {

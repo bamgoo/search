@@ -69,36 +69,39 @@ func mergeQueryMap(dst Query, cfg Map) Query {
 	if cfg == nil {
 		return dst
 	}
-	if v, ok := pickString(cfg, "$keyword", "$q", "keyword", "q"); ok && strings.TrimSpace(v) != "" {
+	if v, ok := pickString(cfg, OptKeyword, OptQuery); ok && strings.TrimSpace(v) != "" {
 		dst.Keyword = strings.TrimSpace(v)
 	}
-	if v, ok := toInt(pickValue(cfg, "$offset", "offset")); ok {
+	if v, ok := toInt(pickValue(cfg, OptOffset)); ok {
 		dst.Offset = v
 	}
-	if v, ok := toInt(pickValue(cfg, "$limit", "limit")); ok {
+	if v, ok := toInt(pickValue(cfg, OptLimit)); ok {
 		dst.Limit = v
 	}
-	if v, ok := pickValueOK(cfg, "$fields", "$select", "fields", "select"); ok {
+	if v, ok := parseBool(pickValue(cfg, OptPrefix)); ok {
+		dst.Prefix = v
+	}
+	if v, ok := pickValueOK(cfg, OptFields, OptSelect); ok {
 		dst.Fields = toStrings(v)
 	}
-	if v, ok := pickValueOK(cfg, "$facets", "facets"); ok {
+	if v, ok := pickValueOK(cfg, OptFacets); ok {
 		dst.Facets = toStrings(v)
 	}
-	if v, ok := pickValueOK(cfg, "$highlight", "highlight"); ok {
+	if v, ok := pickValueOK(cfg, OptHighlight); ok {
 		dst.Highlight = toStrings(v)
 	}
-	if v, ok := pickMap(cfg, "$setting", "setting"); ok {
+	if v, ok := pickMap(cfg, OptSetting); ok {
 		dst.Setting = mergeMaps(dst.Setting, v)
 	}
-	if v, ok := pickMap(cfg, "$raw", "raw"); ok {
+	if v, ok := pickMap(cfg, OptRaw); ok {
 		dst.Raw = mergeMaps(dst.Raw, v)
 	}
 
-	if vv, ok := pickValueOK(cfg, "$sort", "sort", "sorts", "$sorts"); ok {
+	if vv, ok := pickValueOK(cfg, OptSort, OptSorts); ok {
 		dst.Sorts = parseSorts(vv)
 	}
 
-	if vv, ok := pickValueOK(cfg, "$filters", "$filter", "filters", "filter"); ok {
+	if vv, ok := pickValueOK(cfg, OptFilters, OptFilter); ok {
 		dst.Filters = append(dst.Filters, parseFilters(vv)...)
 	}
 
@@ -196,17 +199,17 @@ func parseFieldFilters(field string, val Any) []Filter {
 		for opKey, opVal := range mv {
 			op := normalizeFilterOp(opKey)
 			switch op {
-			case "eq", "ne", "gt", "gte", "lt", "lte":
+			case FilterEq, FilterNe, FilterGt, FilterGte, FilterLt, FilterLte:
 				out = append(out, Filter{Field: field, Op: op, Value: opVal})
 				handled = true
-			case "in", "nin":
+			case FilterIn, FilterNin:
 				out = append(out, Filter{Field: field, Op: op, Values: toAnys(opVal)})
 				handled = true
-			case "range":
+			case FilterRange:
 				if rv, ok := opVal.(Map); ok {
-					out = append(out, Filter{Field: field, Op: "range", Min: rv["min"], Max: rv["max"]})
+					out = append(out, Filter{Field: field, Op: FilterRange, Min: rv["min"], Max: rv["max"]})
 				} else {
-					out = append(out, Filter{Field: field, Op: "range", Min: mv["min"], Max: mv["max"]})
+					out = append(out, Filter{Field: field, Op: FilterRange, Min: mv["min"], Max: mv["max"]})
 				}
 				handled = true
 			case "op", "value", "values", "min", "max":
@@ -217,10 +220,10 @@ func parseFieldFilters(field string, val Any) []Filter {
 			return out
 		}
 		// map without supported operators is treated as eq value
-		return []Filter{{Field: field, Op: "eq", Value: val}}
+		return []Filter{{Field: field, Op: FilterEq, Value: val}}
 	}
 
-	return []Filter{{Field: field, Op: "eq", Value: val}}
+	return []Filter{{Field: field, Op: FilterEq, Value: val}}
 }
 
 func parseSortDirection(v Any) (bool, bool) {
@@ -268,19 +271,19 @@ func normalizeFilterOp(op string) string {
 	s = strings.TrimPrefix(s, "$")
 	switch s {
 	case "=":
-		return "eq"
+		return FilterEq
 	case "!=":
-		return "ne"
+		return FilterNe
 	case ">":
-		return "gt"
+		return FilterGt
 	case ">=":
-		return "gte"
+		return FilterGte
 	case "<":
-		return "lt"
+		return FilterLt
 	case "<=":
-		return "lte"
+		return FilterLte
 	case "not_in":
-		return "nin"
+		return FilterNin
 	default:
 		return s
 	}
@@ -369,15 +372,16 @@ func parseTopLevelFilters(cfg Map) []Filter {
 		return nil
 	}
 	reserved := map[string]struct{}{
-		"keyword": {}, "q": {}, "$keyword": {}, "$q": {},
-		"offset": {}, "$offset": {}, "limit": {}, "$limit": {},
-		"fields": {}, "$fields": {}, "select": {}, "$select": {},
-		"facets": {}, "$facets": {},
-		"highlight": {}, "$highlight": {},
-		"setting": {}, "$setting": {},
-		"raw": {}, "$raw": {},
-		"sort": {}, "$sort": {}, "sorts": {}, "$sorts": {},
-		"filters": {}, "$filters": {}, "filter": {}, "$filter": {},
+		OptKeyword: {}, OptQuery: {},
+		OptPrefix: {},
+		OptOffset: {}, OptLimit: {},
+		OptFields: {}, OptSelect: {},
+		OptFacets:    {},
+		OptHighlight: {},
+		OptSetting:   {},
+		OptRaw:       {},
+		OptSort:      {}, OptSorts: {},
+		OptFilters: {}, OptFilter: {},
 	}
 
 	out := make([]Filter, 0)
@@ -393,6 +397,28 @@ func parseTopLevelFilters(cfg Map) []Filter {
 	return out
 }
 
+func parseBool(v Any) (bool, bool) {
+	switch vv := v.(type) {
+	case bool:
+		return vv, true
+	case int:
+		return vv != 0, true
+	case int64:
+		return vv != 0, true
+	case float64:
+		return vv != 0, true
+	case string:
+		s := strings.ToLower(strings.TrimSpace(vv))
+		switch s {
+		case "1", "true", "yes", "on":
+			return true, true
+		case "0", "false", "no", "off":
+			return false, true
+		}
+	}
+	return false, false
+}
+
 func FilterMatch(filter Filter, payload Map) bool {
 	if payload == nil {
 		return false
@@ -403,36 +429,36 @@ func FilterMatch(filter Filter, payload Map) bool {
 	}
 	op := strings.ToLower(strings.TrimSpace(filter.Op))
 	if op == "" {
-		op = "eq"
+		op = FilterEq
 	}
 	switch op {
-	case "eq", "=":
+	case FilterEq, "=":
 		return compareEqual(val, filter.Value)
-	case "ne", "!=":
+	case FilterNe, "!=":
 		return !compareEqual(val, filter.Value)
-	case "in":
+	case FilterIn:
 		for _, one := range filter.Values {
 			if compareEqual(val, one) {
 				return true
 			}
 		}
 		return false
-	case "nin", "not_in":
+	case FilterNin, "not_in":
 		for _, one := range filter.Values {
 			if compareEqual(val, one) {
 				return false
 			}
 		}
 		return true
-	case "gt", ">":
+	case FilterGt, ">":
 		return compareNumber(val, filter.Value, ">")
-	case "gte", ">=":
+	case FilterGte, ">=":
 		return compareNumber(val, filter.Value, ">=")
-	case "lt", "<":
+	case FilterLt, "<":
 		return compareNumber(val, filter.Value, "<")
-	case "lte", "<=":
+	case FilterLte, "<=":
 		return compareNumber(val, filter.Value, "<=")
-	case "range":
+	case FilterRange:
 		return compareRange(val, filter.Min, filter.Max)
 	default:
 		return compareEqual(val, filter.Value)

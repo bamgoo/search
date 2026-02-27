@@ -6,14 +6,14 @@
 
 1. 多连接配置 + 权重分布。
 2. 统一索引接口：
-   - `CreateIndex`
-   - `DropIndex`
-   - `Upsert`
+   - 索引按 `Register(indexName, search.Index{...})` 自动同步
+   - `Upsert(index, rows ...Map)`
+   - `Clear(index)`
    - `Delete`
 3. 统一查询接口：
    - `Search(index, keyword, args ...Any)`
    - `Count(index, keyword, args ...Any)`
-   - `Suggest(index, text, limit)`
+   - `Signature(index, keyword, args ...Any)`
 4. 统一查询 DSL（Map，推荐 `$` 前缀）：
    - `$filters`
    - `$sort`
@@ -21,11 +21,15 @@
    - `$fields`（同 `$select`）
    - `$facets`
    - `$highlight`
+   - `$prefix`（前缀匹配）
    - 高亮内容直接写回 `hits[].payload` 对应字段
 5. 支持索引字段定义（`Index.Attributes`）：
    - 写入前按字段定义做 `Mapping`
    - 查询结果按字段定义做 `Mapping`
    - 驱动建索引时可按属性生成结构（驱动支持范围内）
+6. 可查看驱动能力：
+   - `GetCapabilities(index)`
+   - `ListCapabilities()`
 
 ## 注册与配置
 
@@ -80,6 +84,7 @@ res, err := search.Search("article", "go", Map{
     "$fields": []string{"title", "category", "score"},
     "$facets": []string{"category"},
     "$highlight": []string{"title", "content"},
+    "$prefix": false,
 })
 _ = res
 _ = err

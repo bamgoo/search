@@ -3,6 +3,22 @@ package search
 import . "github.com/bamgoo/base"
 
 type (
+	Capabilities struct {
+		SyncIndex bool
+		Clear     bool
+		Upsert    bool
+		Delete    bool
+		Search    bool
+		Count     bool
+		Suggest   bool
+
+		Sort      bool
+		Facets    bool
+		Highlight bool
+
+		FilterOps []string
+	}
+
 	Driver interface {
 		Connect(*Instance) (Connection, error)
 	}
@@ -11,13 +27,13 @@ type (
 		Open() error
 		Close() error
 
-		CreateIndex(name string, index Index) error
-		DropIndex(name string) error
-		Upsert(index string, docs []Document) error
+		Capabilities() Capabilities
+		SyncIndex(name string, index Index) error
+		Clear(index string) error
+		Upsert(index string, rows []Map) error
 		Delete(index string, ids []string) error
 		Search(index string, query Query) (Result, error)
 		Count(index string, query Query) (int64, error)
-		Suggest(index string, text string, limit int) ([]string, error)
 	}
 
 	Index struct {
@@ -34,11 +50,6 @@ type (
 	}
 
 	Indexes map[string]Index
-
-	Document struct {
-		ID      string `json:"id"`
-		Payload Map    `json:"payload"`
-	}
 
 	Filter struct {
 		Field  string
@@ -69,6 +80,7 @@ type (
 
 	Query struct {
 		Keyword   string
+		Prefix    bool
 		Filters   []Filter
 		Sorts     []Sort
 		Offset    int
