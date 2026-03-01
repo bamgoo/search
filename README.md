@@ -1,123 +1,80 @@
 # search
 
-`infrago` 全文搜索模块，支持统一 API + 多驱动。
+`search` 是 infrago 的模块包。
 
-## 能力
+## 安装
 
-1. 多连接配置 + 权重分布。
-2. 统一索引接口：
-   - 索引按 `Register(indexName, search.Index{...})` 自动同步
-   - `Upsert(index, rows ...Map)`
-   - `Clear(index)`
-   - `Delete`
-3. 统一查询接口：
-   - `Search(index, keyword, args ...Any)`
-   - `Count(index, keyword, args ...Any)`
-   - `Signature(index, keyword, args ...Any)`
-4. 统一查询 DSL（Map，推荐 `$` 前缀）：
-   - `$filters`
-   - `$sort`
-   - `$offset/$limit`
-   - `$fields`（同 `$select`）
-   - `$facets`
-   - `$highlight`
-   - `$prefix`（前缀匹配）
-   - 高亮内容直接写回 `hits[].payload` 对应字段
-5. 支持索引字段定义（`Index.Attributes`）：
-   - 写入前按字段定义做 `Mapping`
-   - 查询结果按字段定义做 `Mapping`
-   - 驱动建索引时可按属性生成结构（驱动支持范围内）
-6. 可查看驱动能力：
-   - `GetCapabilities(index)`
-   - `ListCapabilities()`
-
-## 注册与配置
-
-```go
-import (
-    "github.com/infrago/infra"
-    "github.com/infrago/search"
-)
-
-infra.Register("default", search.Config{
-    Driver: "file",
-    Weight: 1,
-    Prefix: "demo",
-})
-
-infra.Register("article", search.Index{
-    Primary: "id",
-    Attributes: Vars{
-        "id":       Var{Type: "string", Required: true},
-        "title":    Var{Type: "string", Required: true},
-        "content":  Var{Type: "string"},
-        "category": Var{Type: "string"},
-        "score":    Var{Type: "float"},
-        "created":  Var{Type: "timestamp"},
-    },
-})
+```bash
+go get github.com/infrago/search@latest
 ```
 
-也可通过配置文件：
+## 最小接入
+
+```go
+package main
+
+import (
+    _ "github.com/infrago/search"
+    "github.com/infrago/infra"
+)
+
+func main() {
+    infra.Run()
+}
+```
+
+## 配置示例
 
 ```toml
 [search]
-driver = "file"
-weight = 1
-prefix = "demo"
-
-[search.setting]
-path = "data/search"
+driver = "default"
 ```
 
-## 查询示例
+## 公开 API（摘自源码）
 
-```go
-res, err := search.Search("article", "go", Map{
-    "$filters": Map{
-        "category": "tech",
-        "score": Map{"$gte": 8.5},
-    },
-    "$sort": Map{"score": DESC},
-    "$offset": 0,
-    "$limit":  20,
-    "$fields": []string{"title", "category", "score"},
-    "$facets": []string{"category"},
-    "$highlight": []string{"title", "content"},
-    "$prefix": false,
-})
-_ = res
-_ = err
-```
+- `func BuildQuery(keyword string, args ...Any) Query`
+- `func FilterMatch(filter Filter, payload Map) bool`
+- `func QuerySignature(index string, q Query) string`
+- `func (d *defaultDriver) Connect(inst *Instance) (Connection, error)`
+- `func (c *defaultConnection) Open() error  { return nil }`
+- `func (c *defaultConnection) Close() error { return nil }`
+- `func (c *defaultConnection) Capabilities() Capabilities`
+- `func (c *defaultConnection) SyncIndex(name string, index Index) error`
+- `func (c *defaultConnection) Clear(name string) error`
+- `func (c *defaultConnection) Upsert(index string, rows []Map) error`
+- `func (c *defaultConnection) Delete(index string, ids []string) error`
+- `func (c *defaultConnection) Search(index string, query Query) (Result, error)`
+- `func (c *defaultConnection) Count(index string, query Query) (int64, error)`
+- `func RegisterDriver(name string, driver Driver)`
+- `func RegisterConfig(name string, cfg Config)`
+- `func RegisterConfigs(configs Configs)`
+- `func RegisterIndex(name string, index Index)`
+- `func RegisterIndexes(indexes Indexes)`
+- `func Clear(index string) error`
+- `func GetCapabilities(index string) Capabilities`
+- `func ListCapabilities() map[string]Capabilities`
+- `func Upsert(index string, rows ...Map) error`
+- `func Delete(index string, ids []string) error`
+- `func Search(index, keyword string, args ...Any) (Result, error)`
+- `func Count(index, keyword string, args ...Any) (int64, error)`
+- `func Signature(index, keyword string, args ...Any) string`
+- `func (m *Module) Register(name string, value Any)`
+- `func (m *Module) RegisterDriver(name string, driver Driver)`
+- `func (m *Module) RegisterConfig(name string, cfg Config)`
+- `func (m *Module) RegisterConfigs(configs Configs)`
+- `func (m *Module) RegisterIndex(name string, index Index)`
+- `func (m *Module) RegisterIndexes(indexes Indexes)`
+- `func (m *Module) Config(global Map)`
+- `func (m *Module) Setup() {}`
+- `func (m *Module) Open()`
+- `func (m *Module) Start()`
+- `func (m *Module) Stop() {}`
+- `func (m *Module) Close()`
+- `func (m *Module) Clear(index string) error`
+- `func (m *Module) Capabilities(index string) Capabilities`
 
-## filter 约定
+## 排错
 
-支持以下操作符（统一使用 `$` 前缀）：
-
-- `$eq` / `$ne`
-- `$in` / `$nin`
-- `$gt` / `$gte` / `$lt` / `$lte`
-- `$range`（配合 `min/max`）
-
-只支持 Map 风格参数，旧格式已移除：
-
-- sort 的 `field/desc`
-- filter 的 `op/value`
-
-示例：
-
-```go
-Map{"$filters": Map{"category": "123"}}
-Map{"$filters": Map{"category": Map{"$eq": 123}}}
-Map{"$filters": Map{"score": Map{"$gt": 100, "$lt": 500}}}
-Map{"$sort": Map{"score": DESC}}
-Map{"$sort": []Map{{"score": DESC}, {"id": ASC}}}
-Map{"category": "tech", "$sort": Map{"score": DESC}} // 顶层字段也可直接当过滤条件
-```
-
-## 驱动
-
-- `search-file`（driver: `file`）
-- `search-meilisearch`（driver: `meilisearch`/`meili`）
-- `search-opensearch`（driver: `opensearch`）
-- `search-elasticsearch`（driver: `elasticsearch`/`es`）
+- 模块未运行：确认空导入已存在
+- driver 无效：确认驱动包已引入
+- 配置不生效：检查配置段名是否为 `[search]`
