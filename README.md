@@ -1,80 +1,56 @@
 # search
 
-`search` 是 infrago 的模块包。
+`search` 是 infrago 的**模块**。
 
-## 安装
+## 包定位
 
-```bash
-go get github.com/infrago/search@latest
-```
+- 类型：模块
+- 作用：搜索模块，负责统一检索接口与多搜索后端适配。
 
-## 最小接入
+## 主要功能
+
+- 对上提供统一模块接口
+- 对下通过驱动接口接入具体后端
+- 支持按配置切换驱动实现
+
+## 快速接入
 
 ```go
-package main
-
-import (
-    _ "github.com/infrago/search"
-    "github.com/infrago/infra"
-)
-
-func main() {
-    infra.Run()
-}
+import _ "github.com/infrago/search"
 ```
-
-## 配置示例
 
 ```toml
 [search]
 driver = "default"
 ```
 
-## 公开 API（摘自源码）
+## 驱动实现接口列表
 
-- `func BuildQuery(keyword string, args ...Any) Query`
-- `func FilterMatch(filter Filter, payload Map) bool`
-- `func QuerySignature(index string, q Query) string`
-- `func (d *defaultDriver) Connect(inst *Instance) (Connection, error)`
-- `func (c *defaultConnection) Open() error  { return nil }`
-- `func (c *defaultConnection) Close() error { return nil }`
-- `func (c *defaultConnection) Capabilities() Capabilities`
-- `func (c *defaultConnection) SyncIndex(name string, index Index) error`
-- `func (c *defaultConnection) Clear(name string) error`
-- `func (c *defaultConnection) Upsert(index string, rows []Map) error`
-- `func (c *defaultConnection) Delete(index string, ids []string) error`
-- `func (c *defaultConnection) Search(index string, query Query) (Result, error)`
-- `func (c *defaultConnection) Count(index string, query Query) (int64, error)`
-- `func RegisterDriver(name string, driver Driver)`
-- `func RegisterConfig(name string, cfg Config)`
-- `func RegisterConfigs(configs Configs)`
-- `func RegisterIndex(name string, index Index)`
-- `func RegisterIndexes(indexes Indexes)`
-- `func Clear(index string) error`
-- `func GetCapabilities(index string) Capabilities`
-- `func ListCapabilities() map[string]Capabilities`
-- `func Upsert(index string, rows ...Map) error`
-- `func Delete(index string, ids []string) error`
-- `func Search(index, keyword string, args ...Any) (Result, error)`
-- `func Count(index, keyword string, args ...Any) (int64, error)`
-- `func Signature(index, keyword string, args ...Any) string`
-- `func (m *Module) Register(name string, value Any)`
-- `func (m *Module) RegisterDriver(name string, driver Driver)`
-- `func (m *Module) RegisterConfig(name string, cfg Config)`
-- `func (m *Module) RegisterConfigs(configs Configs)`
-- `func (m *Module) RegisterIndex(name string, index Index)`
-- `func (m *Module) RegisterIndexes(indexes Indexes)`
-- `func (m *Module) Config(global Map)`
-- `func (m *Module) Setup() {}`
-- `func (m *Module) Open()`
-- `func (m *Module) Start()`
-- `func (m *Module) Stop() {}`
-- `func (m *Module) Close()`
-- `func (m *Module) Clear(index string) error`
-- `func (m *Module) Capabilities(index string) Capabilities`
+以下接口由驱动实现（来自模块 `driver.go`）：
 
-## 排错
+### Driver
 
-- 模块未运行：确认空导入已存在
-- driver 无效：确认驱动包已引入
-- 配置不生效：检查配置段名是否为 `[search]`
+- `Connect(*Instance) (Connection, error)`
+
+### Connection
+
+- `Open() error`
+- `Close() error`
+- `Capabilities() Capabilities`
+- `SyncIndex(name string, index Index) error`
+- `Clear(index string) error`
+- `Upsert(index string, rows []Map) error`
+- `Delete(index string, ids []string) error`
+- `Search(index string, query Query) (Result, error)`
+- `Count(index string, query Query) (int64, error)`
+
+## 全局配置项（所有配置键）
+
+配置段：`[search]`
+
+- 未检测到配置键（请查看模块源码的 configure 逻辑）
+
+## 说明
+
+- `setting` 一般用于向具体驱动透传专用参数
+- 多实例配置请参考模块源码中的 Config/configure 处理逻辑
