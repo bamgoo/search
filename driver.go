@@ -1,6 +1,6 @@
 package search
 
-import . "github.com/bamgoo/base"
+import . "github.com/infrago/base"
 
 type (
 	Capabilities struct {

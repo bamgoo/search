@@ -1,6 +1,6 @@
 package search
 
-import . "github.com/bamgoo/base"
+import . "github.com/infrago/base"
 
 func RegisterDriver(name string, driver Driver) {
 	module.RegisterDriver(name, driver)

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bamgoo/bamgoo"
-	. "github.com/bamgoo/base"
+	"github.com/infrago/infra"
+	. "github.com/infrago/base"
 )
 
 type defaultDriver struct{}
@@ -25,7 +25,7 @@ type memoryIndex struct {
 }
 
 func init() {
-	module.RegisterDriver(bamgoo.DEFAULT, &defaultDriver{})
+	module.RegisterDriver(infra.DEFAULT, &defaultDriver{})
 }
 
 func (d *defaultDriver) Connect(inst *Instance) (Connection, error) {

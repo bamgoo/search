@@ -7,13 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bamgoo/bamgoo"
-	. "github.com/bamgoo/base"
-	"github.com/bamgoo/util"
+	"github.com/infrago/infra"
+	. "github.com/infrago/base"
+	"github.com/infrago/util"
 )
 
 func init() {
-	bamgoo.Mount(module)
+	infra.Mount(module)
 }
 
 var module = &Module{
@@ -76,12 +76,12 @@ func (m *Module) RegisterDriver(name string, driver Driver) {
 	defer m.mutex.Unlock()
 
 	if name == "" {
-		name = bamgoo.DEFAULT
+		name = infra.DEFAULT
 	}
 	if driver == nil {
 		panic("invalid search driver: " + name)
 	}
-	if bamgoo.Override() {
+	if infra.Override() {
 		m.drivers[name] = driver
 	} else if _, ok := m.drivers[name]; !ok {
 		m.drivers[name] = driver
@@ -93,9 +93,9 @@ func (m *Module) RegisterConfig(name string, cfg Config) {
 	defer m.mutex.Unlock()
 
 	if name == "" {
-		name = bamgoo.DEFAULT
+		name = infra.DEFAULT
 	}
-	if bamgoo.Override() {
+	if infra.Override() {
 		m.configs[name] = cfg
 	} else if _, ok := m.configs[name]; !ok {
 		m.configs[name] = cfg
@@ -119,7 +119,7 @@ func (m *Module) RegisterIndex(name string, index Index) {
 	if index.Primary == "" {
 		index.Primary = "id"
 	}
-	if bamgoo.Override() {
+	if infra.Override() {
 		m.indexes[name] = index
 	} else if _, ok := m.indexes[name]; !ok {
 		m.indexes[name] = index
@@ -161,7 +161,7 @@ func (m *Module) Config(global Map) {
 	}
 
 	if defaults.Driver != "" || defaults.Weight != 0 || defaults.Prefix != "" || defaults.Timeout > 0 || defaults.Setting != nil {
-		m.RegisterConfig(bamgoo.DEFAULT, defaults)
+		m.RegisterConfig(infra.DEFAULT, defaults)
 	}
 
 	for name, vv := range cfgMap {
@@ -203,15 +203,15 @@ func (m *Module) Open() {
 	}
 
 	if len(m.configs) == 0 {
-		m.configs[bamgoo.DEFAULT] = Config{Driver: bamgoo.DEFAULT, Weight: 1}
+		m.configs[infra.DEFAULT] = Config{Driver: infra.DEFAULT, Weight: 1}
 	}
 
 	for name, cfg := range m.configs {
 		if name == "" {
-			name = bamgoo.DEFAULT
+			name = infra.DEFAULT
 		}
 		if cfg.Driver == "" {
-			cfg.Driver = bamgoo.DEFAULT
+			cfg.Driver = infra.DEFAULT
 		}
 		if cfg.Weight == 0 {
 			cfg.Weight = 1
@@ -252,7 +252,7 @@ func (m *Module) Open() {
 }
 
 func (m *Module) Start() {
-	fmt.Printf("bamgoo search module is running with %d connections.\n", len(m.instances))
+	fmt.Printf("infrago search module is running with %d connections.\n", len(m.instances))
 }
 
 func (m *Module) Stop() {}
@@ -423,7 +423,7 @@ func (m *Module) prepareRows(index string, rows []Map) ([]Map, error) {
 		payload["id"] = idValue
 
 		wrapped := Map{}
-		res := bamgoo.Mapping(idx.Attributes, payload, wrapped, false, !strictWrite)
+		res := infra.Mapping(idx.Attributes, payload, wrapped, false, !strictWrite)
 		if res != nil && res.Fail() {
 			return nil, fmt.Errorf("search index %s mapping failed: %s", index, res.Error())
 		}
@@ -453,7 +453,7 @@ func (m *Module) normalizeResult(index string, result Result) (Result, error) {
 			continue
 		}
 		wrapped := Map{}
-		res := bamgoo.Mapping(idx.Attributes, payload, wrapped, false, !strictRead)
+		res := infra.Mapping(idx.Attributes, payload, wrapped, false, !strictRead)
 		if res != nil && res.Fail() {
 			if strictRead {
 				return result, fmt.Errorf("search index %s read mapping failed: %s", index, res.Error())

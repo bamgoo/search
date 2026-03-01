@@ -1,6 +1,6 @@
 # search
 
-`bamgoo` 全文搜索模块，支持统一 API + 多驱动。
+`infrago` 全文搜索模块，支持统一 API + 多驱动。
 
 ## 能力
 
@@ -35,17 +35,17 @@
 
 ```go
 import (
-    "github.com/bamgoo/bamgoo"
-    "github.com/bamgoo/search"
+    "github.com/infrago/infra"
+    "github.com/infrago/search"
 )
 
-bamgoo.Register("default", search.Config{
+infra.Register("default", search.Config{
     Driver: "file",
     Weight: 1,
     Prefix: "demo",
 })
 
-bamgoo.Register("article", search.Index{
+infra.Register("article", search.Index{
     Primary: "id",
     Attributes: Vars{
         "id":       Var{Type: "string", Required: true},
