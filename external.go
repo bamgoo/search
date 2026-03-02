@@ -2,26 +2,6 @@ package search
 
 import . "github.com/infrago/base"
 
-func RegisterDriver(name string, driver Driver) {
-	module.RegisterDriver(name, driver)
-}
-
-func RegisterConfig(name string, cfg Config) {
-	module.RegisterConfig(name, cfg)
-}
-
-func RegisterConfigs(configs Configs) {
-	module.RegisterConfigs(configs)
-}
-
-func RegisterIndex(name string, index Index) {
-	module.RegisterIndex(name, index)
-}
-
-func RegisterIndexes(indexes Indexes) {
-	module.RegisterIndexes(indexes)
-}
-
 func Clear(index string) error {
 	return module.Clear(index)
 }
